@@ -7,6 +7,7 @@ type Suggestion = {
 
 type ChatMessage = {
   text: string;
+  author?: string;
   direction?: 'incoming' | 'outgoing';
 };
 
@@ -34,17 +35,6 @@ const composerSelectors = [
   'div[contenteditable="true"]',
   'textarea',
   'input[type="text"]',
-];
-
-const messageSelectors = [
-  '[data-message-id] .text-content',
-  '[data-message-id] .translatable-message',
-  '.message .text-content',
-  '.message .translatable-message',
-  '.Message .text-content',
-  '.bubble-content .text-content',
-  '[data-message-id]',
-  '.message',
 ];
 
 const isVisibleElement = (element: Element) => {
@@ -75,44 +65,108 @@ const findComposer = () => {
 };
 
 const getMessageDirection = (element: Element): ChatMessage['direction'] => {
-  const messageContainer = element.closest('[data-message-id], .message, .Message');
-  const className = messageContainer?.className.toString().toLowerCase() ?? '';
+  const className = element.className.toString().toLowerCase();
 
-  if (className.includes('own') || className.includes('out') || className.includes('is-out')) {
+  if (
+    element.classList.contains('own') ||
+    className.includes(' is-out') ||
+    element.querySelector('.with-outgoing-icon')
+  ) {
     return 'outgoing';
   }
 
-  if (className.includes('in') || className.includes('message')) {
-    return 'incoming';
+  return 'incoming';
+};
+
+const getMessageAuthor = (message: Element, direction: ChatMessage['direction']) => {
+  if (direction === 'outgoing') {
+    return 'You';
   }
 
-  return undefined;
+  const senderGroup = message.closest('.sender-group-container');
+  const title = message.querySelector('.sender-title') ?? senderGroup?.querySelector('.sender-title');
+  const avatar = senderGroup?.querySelector('.Avatar[aria-label], .Avatar img[alt]');
+  const author = title?.textContent ?? avatar?.getAttribute('aria-label') ?? avatar?.getAttribute('alt');
+
+  return normalizeText(author ?? '') || undefined;
+};
+
+const getPrimaryMessageTextElement = (message: Element) => {
+  const candidates = Array.from(message.querySelectorAll<HTMLElement>('.text-content, .translatable-message'));
+
+  return candidates.find(
+    element =>
+      element.closest('.Message') === message &&
+      !element.closest('.message-subheader') &&
+      !element.closest('.EmbeddedMessage') &&
+      !element.closest('.Reactions'),
+  );
+};
+
+const getCleanMessageText = (message: Element) => {
+  const textElement = getPrimaryMessageTextElement(message);
+
+  if (!textElement) {
+    return '';
+  }
+
+  const clone = textElement.cloneNode(true) as HTMLElement;
+
+  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  clone.querySelectorAll('[data-alt]').forEach(element => {
+    element.replaceWith(document.createTextNode(element.getAttribute('data-alt') ?? ''));
+  });
+  clone
+    .querySelectorAll(
+      [
+        '.MessageMeta',
+        '.Reactions',
+        '.message-time',
+        '.MessageOutgoingStatus',
+        '[data-ignore-on-paste="true"]',
+        'button',
+      ].join(', '),
+    )
+    .forEach(element => element.remove());
+
+  return normalizeText(clone.textContent ?? '');
 };
 
 const collectRecentMessages = () => {
   const messages: ChatMessage[] = [];
-  const seen = new Set<string>();
+  const seenMessageIds = new Set<string>();
+  const elements = Array.from(
+    document.querySelectorAll<HTMLElement>('.Message[data-message-id], .message-list-item[data-message-id]'),
+  )
+    .filter(isVisibleElement)
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
 
-  for (const selector of messageSelectors) {
-    const elements = Array.from(document.querySelectorAll(selector)).filter(isVisibleElement);
-
-    for (const element of elements) {
-      if (element.closest('[contenteditable="true"]')) {
-        continue;
-      }
-
-      const text = normalizeText(getElementText(element));
-
-      if (text.length < 2 || seen.has(text)) {
-        continue;
-      }
-
-      seen.add(text);
-      messages.push({
-        text: text.slice(0, 500),
-        direction: getMessageDirection(element),
-      });
+  for (const element of elements) {
+    if (element.closest('[contenteditable="true"]')) {
+      continue;
     }
+
+    const messageId = element.dataset.messageId;
+
+    if (!messageId || seenMessageIds.has(messageId)) {
+      continue;
+    }
+
+    seenMessageIds.add(messageId);
+
+    const text = getCleanMessageText(element);
+
+    if (text.length < 2) {
+      continue;
+    }
+
+    const direction = getMessageDirection(element);
+
+    messages.push({
+      text: text.slice(0, 500),
+      author: getMessageAuthor(element, direction),
+      direction,
+    });
   }
 
   return messages.slice(-MAX_CONTEXT_MESSAGES);

@@ -14,8 +14,9 @@ const formatMessages = (messages: GenerateSuggestionsInput['messages']) => {
 
   return messages
     .map(message => {
+      const author = message.author ? `${message.author}: ` : '';
       const direction = message.direction ? `[${message.direction}] ` : '';
-      return `${direction}${message.text}`;
+      return `${direction}${author}${message.text}`;
     })
     .join('\n');
 };

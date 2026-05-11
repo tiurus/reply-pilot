@@ -4,6 +4,7 @@ export type { AiSettings };
 
 export type ChatMessage = {
   text: string;
+  author?: string;
   direction?: 'incoming' | 'outgoing';
 };
 
