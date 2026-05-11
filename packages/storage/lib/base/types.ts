@@ -52,3 +52,12 @@ export interface ThemeStateType {
 export type ThemeStorageType = BaseStorageType<ThemeStateType> & {
   toggle: () => Promise<void>;
 };
+
+export type AiSettings = {
+  provider: 'openai';
+  apiKey: string;
+  model: string;
+  temperature: number;
+  tone: 'neutral' | 'friendly' | 'short' | 'funny';
+  replyGender: 'auto' | 'masculine' | 'feminine' | 'neutral';
+};

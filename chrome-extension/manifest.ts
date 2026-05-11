@@ -30,7 +30,7 @@ const manifest = {
   },
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
-  host_permissions: ['<all_urls>'],
+  host_permissions: ['https://web.telegram.org/*', 'https://api.openai.com/*'],
   permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel'],
   options_page: 'options/index.html',
   background: {
@@ -49,15 +49,15 @@ const manifest = {
   },
   content_scripts: [
     {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      js: ['content/all.iife.js'],
+      matches: ['https://web.telegram.org/*'],
+      js: ['content-runtime/all.iife.js'],
     },
     {
       matches: ['https://example.com/*'],
       js: ['content/example.iife.js'],
     },
     {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
+      matches: ['https://web.telegram.org/*'],
       js: ['content-ui/all.iife.js'],
     },
     {
@@ -65,7 +65,7 @@ const manifest = {
       js: ['content-ui/example.iife.js'],
     },
     {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
+      matches: ['https://web.telegram.org/*'],
       css: ['content.css'],
     },
   ],

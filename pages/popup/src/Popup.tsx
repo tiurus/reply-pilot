@@ -1,8 +1,9 @@
 import '@src/Popup.css';
 import { t } from '@extension/i18n';
-import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
-import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner, ToggleButton } from '@extension/ui';
+import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
+import { aiSettingsStorage } from '@extension/storage';
+import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
+import { useEffect, useState } from 'react';
 
 const notificationOptions = {
   type: 'basic',
@@ -11,11 +12,41 @@ const notificationOptions = {
   message: 'You cannot inject script here!',
 } as const;
 
-const Popup = () => {
-  const { isLight } = useStorage(exampleThemeStorage);
-  const logo = isLight ? 'popup/logo_vertical.svg' : 'popup/logo_vertical_dark.svg';
+const clampTemperature = (value: number) => Math.min(2, Math.max(0, value));
 
-  const goGithubSite = () => chrome.tabs.create(PROJECT_URL_OBJECT);
+const Popup = () => {
+  const settings = useStorage(aiSettingsStorage);
+  const [apiKey, setApiKey] = useState(settings.apiKey);
+  const [model, setModel] = useState(settings.model);
+  const [temperature, setTemperature] = useState(settings.temperature.toString());
+  const [tone, setTone] = useState(settings.tone ?? 'neutral');
+  const [replyGender, setReplyGender] = useState(settings.replyGender ?? 'masculine');
+  const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    setApiKey(settings.apiKey);
+    setModel(settings.model);
+    setTemperature(settings.temperature.toString());
+    setTone(settings.tone ?? 'neutral');
+    setReplyGender(settings.replyGender ?? 'masculine');
+  }, [settings.apiKey, settings.model, settings.temperature, settings.tone, settings.replyGender]);
+
+  const handleSave = async () => {
+    const normalizedTemperature = clampTemperature(Number.parseFloat(temperature) || 0);
+
+    await aiSettingsStorage.set({
+      provider: 'openai',
+      apiKey: apiKey.trim(),
+      model: model.trim() || 'gpt-4.1-mini',
+      temperature: normalizedTemperature,
+      tone,
+      replyGender,
+    });
+
+    setTemperature(normalizedTemperature.toString());
+    setStatus('Settings saved.');
+    window.setTimeout(() => setStatus(''), 1800);
+  };
 
   const injectContentScript = async () => {
     const [tab] = await chrome.tabs.query({ currentWindow: true, active: true });
@@ -30,7 +61,6 @@ const Popup = () => {
         files: ['/content-runtime/example.iife.js', '/content-runtime/all.iife.js'],
       })
       .catch(err => {
-        // Handling errors related to other paths
         if (err.message.includes('Cannot access a chrome:// URL')) {
           chrome.notifications.create('inject-error', notificationOptions);
         }
@@ -38,25 +68,74 @@ const Popup = () => {
   };
 
   return (
-    <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
-      <header className={cn('App-header', isLight ? 'text-gray-900' : 'text-gray-100')}>
-        <button onClick={goGithubSite}>
-          <img src={chrome.runtime.getURL(logo)} className="App-logo" alt="logo" />
-        </button>
-        <p>
-          Edit <code>pages/popup/src/Popup.tsx</code>
-        </p>
-        <button
-          className={cn(
-            'mt-4 rounded px-4 py-1 font-bold shadow hover:scale-105',
-            isLight ? 'bg-blue-200 text-black' : 'bg-gray-700 text-white',
-          )}
-          onClick={injectContentScript}>
-          {t('injectButton')}
-        </button>
-        <ToggleButton>{t('toggleTheme')}</ToggleButton>
+    <main className="reply-pilot-popup">
+      <header className="reply-pilot-popup-header">
+        <div>
+          <h1>ReplyPilot</h1>
+          <p>AI Copilot for Telegram Web</p>
+        </div>
       </header>
-    </div>
+
+      <label className="reply-pilot-field">
+        <span>API Key</span>
+        <input
+          autoComplete="off"
+          onChange={event => setApiKey(event.target.value)}
+          placeholder="sk-..."
+          type="password"
+          value={apiKey}
+        />
+      </label>
+
+      <label className="reply-pilot-field">
+        <span>Model</span>
+        <input onChange={event => setModel(event.target.value)} placeholder="gpt-4.1-mini" type="text" value={model} />
+      </label>
+
+      <label className="reply-pilot-field">
+        <span>Temperature</span>
+        <input
+          max="2"
+          min="0"
+          onChange={event => setTemperature(event.target.value)}
+          step="0.1"
+          type="number"
+          value={temperature}
+        />
+      </label>
+
+      <label className="reply-pilot-field">
+        <span>Tone</span>
+        <select onChange={event => setTone(event.target.value as typeof tone)} value={tone}>
+          <option value="neutral">Neutral</option>
+          <option value="friendly">Friendly</option>
+          <option value="short">Short</option>
+          <option value="funny">Funny</option>
+        </select>
+      </label>
+
+      <label className="reply-pilot-field">
+        <span>Reply gender</span>
+        <select onChange={event => setReplyGender(event.target.value as typeof replyGender)} value={replyGender}>
+          <option value="masculine">Masculine</option>
+          <option value="feminine">Feminine</option>
+          <option value="neutral">Neutral wording</option>
+          <option value="auto">Auto</option>
+        </select>
+      </label>
+
+      <button className="reply-pilot-save-button" type="button" onClick={handleSave}>
+        Save settings
+      </button>
+
+      {status && <div className="reply-pilot-save-status">{status}</div>}
+
+      <button
+        className={cn('mt-4 rounded px-4 py-1 font-bold shadow hover:scale-105', 'bg-blue-200 text-black')}
+        onClick={injectContentScript}>
+        {t('injectButton')}
+      </button>
+    </main>
   );
 };
 
